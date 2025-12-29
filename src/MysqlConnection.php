@@ -3,6 +3,7 @@
 namespace Grimzy\LaravelMysqlSpatial;
 
 use Doctrine\DBAL\Types\Type as DoctrineType;
+use Doctrine\DBAL\DriverManager;
 use Grimzy\LaravelMysqlSpatial\Schema\Builder;
 use Grimzy\LaravelMysqlSpatial\Schema\Grammars\MySqlGrammar;
 use Illuminate\Database\MySqlConnection as IlluminateMySqlConnection;
@@ -26,9 +27,26 @@ class MysqlConnection extends IlluminateMySqlConnection
                 'geometrycollection',
                 'geomcollection',
             ];
-            $dbPlatform = $this->getDoctrineSchemaManager()->getDatabasePlatform();
-            foreach ($geometries as $type) {
-                $dbPlatform->registerDoctrineTypeMapping($type, 'string');
+            
+            try {
+                // Laravel 11: getDoctrineSchemaManager() was removed, use Doctrine DBAL directly
+                if (method_exists($this, 'getDoctrineSchemaManager')) {
+                    // Laravel 10 and below
+                    $dbPlatform = $this->getDoctrineSchemaManager()->getDatabasePlatform();
+                } else {
+                    // Laravel 11+: Create Doctrine connection from PDO
+                    $doctrineConnection = DriverManager::getConnection([
+                        'pdo' => $this->getPdo(),
+                    ]);
+                    $dbPlatform = $doctrineConnection->getDatabasePlatform();
+                }
+                
+                foreach ($geometries as $type) {
+                    $dbPlatform->registerDoctrineTypeMapping($type, 'string');
+                }
+            } catch (\Exception $e) {
+                // Silently fail if Doctrine is not properly configured
+                // Spatial functionality will still work, but column type changes may need manual handling
             }
         }
     }
@@ -40,7 +58,7 @@ class MysqlConnection extends IlluminateMySqlConnection
      */
     protected function getDefaultSchemaGrammar()
     {
-        return $this->withTablePrefix(new MySqlGrammar());
+        return new MySqlGrammar($this);
     }
 
     /**
