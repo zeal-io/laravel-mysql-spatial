@@ -12,7 +12,10 @@ class MySqlGrammar extends IlluminateMySqlGrammar
 
     public function __construct($connection = null)
     {
-        parent::__construct($connection);
+        $parent = get_parent_class($this);
+        if ($parent && method_exists($parent, '__construct')) {
+            parent::__construct($connection);
+        }
         
         // Enable SRID as a column modifier
         if (!in_array(self::COLUMN_MODIFIER_SRID, $this->modifiers)) {
