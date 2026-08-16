@@ -9,7 +9,7 @@ class MysqlConnectionTest extends TestCase
 {
     private $mysqlConnection;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $mysqlConfig = ['driver' => 'mysql', 'prefix' => 'prefix', 'database' => 'database', 'name' => 'foo'];
         $this->mysqlConnection = new MysqlConnection(new PDOStub(), 'database', 'prefix', $mysqlConfig);
@@ -20,5 +20,18 @@ class MysqlConnectionTest extends TestCase
         $builder = $this->mysqlConnection->getSchemaBuilder();
 
         $this->assertInstanceOf(Builder::class, $builder);
+    }
+
+    public function testConstructorDoesNotResolveThePdo()
+    {
+        $resolved = 0;
+
+        new MysqlConnection(function () use (&$resolved) {
+            $resolved++;
+
+            return new PDOStub();
+        }, 'database', 'prefix', ['driver' => 'mysql', 'prefix' => 'prefix', 'database' => 'database', 'name' => 'foo']);
+
+        $this->assertSame(0, $resolved);
     }
 }
