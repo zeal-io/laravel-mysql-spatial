@@ -3,16 +3,25 @@
 namespace Grimzy\LaravelMysqlSpatial;
 
 use Doctrine\DBAL\Types\Type as DoctrineType;
-use Doctrine\DBAL\DriverManager;
 use Grimzy\LaravelMysqlSpatial\Schema\Builder;
 use Grimzy\LaravelMysqlSpatial\Schema\Grammars\MySqlGrammar;
 use Illuminate\Database\MySqlConnection as IlluminateMySqlConnection;
 
 class MysqlConnection extends IlluminateMySqlConnection
 {
-    public function __construct($pdo, $database = '', $tablePrefix = '', array $config = [])
+    /**
+     * Get the Doctrine DBAL database connection instance.
+     *
+     * Geometry type mappings are registered here rather than in the constructor:
+     * resolving the Doctrine connection resolves the PDO, so doing it at construction
+     * time opens a socket to MySQL for every connection the container builds, whether
+     * or not a query is ever run on it.
+     *
+     * @return \Doctrine\DBAL\Connection
+     */
+    public function getDoctrineConnection()
     {
-        parent::__construct($pdo, $database, $tablePrefix, $config);
+        $connection = parent::getDoctrineConnection();
 
         if (class_exists(DoctrineType::class)) {
             // Prevent geometry type fields from throwing a 'type not found' error when changing them
@@ -27,28 +36,15 @@ class MysqlConnection extends IlluminateMySqlConnection
                 'geometrycollection',
                 'geomcollection',
             ];
-            
-            try {
-                // Laravel 11: getDoctrineSchemaManager() was removed, use Doctrine DBAL directly
-                if (method_exists($this, 'getDoctrineSchemaManager')) {
-                    // Laravel 10 and below
-                    $dbPlatform = $this->getDoctrineSchemaManager()->getDatabasePlatform();
-                } else {
-                    // Laravel 11+: Create Doctrine connection from PDO
-                    $doctrineConnection = DriverManager::getConnection([
-                        'pdo' => $this->getPdo(),
-                    ]);
-                    $dbPlatform = $doctrineConnection->getDatabasePlatform();
-                }
-                
-                foreach ($geometries as $type) {
-                    $dbPlatform->registerDoctrineTypeMapping($type, 'string');
-                }
-            } catch (\Exception $e) {
-                // Silently fail if Doctrine is not properly configured
-                // Spatial functionality will still work, but column type changes may need manual handling
+
+            $dbPlatform = $connection->getDatabasePlatform();
+
+            foreach ($geometries as $type) {
+                $dbPlatform->registerDoctrineTypeMapping($type, 'string');
             }
         }
+
+        return $connection;
     }
 
     /**
